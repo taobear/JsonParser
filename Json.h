@@ -6,33 +6,33 @@ namespace JsonParser
 {
 
 enum Json_type {
-	JSON_NULL,
-	JSON_FALSE,
-	JSON_TRUE,
-	JSON_NUMBER,
-	JSON_STRING,
-	JSON_ARRAY,
-	JSON_OBJECT
+    JSON_NULL,
+    JSON_FALSE,
+    JSON_TRUE,
+    JSON_NUMBER,
+    JSON_STRING,
+    JSON_ARRAY,
+    JSON_OBJECT
 };
 
 enum Json_state {
-	OK = 0,
-	EXPECT_VALUE,
-	INVALID_VALUE,
-	ROOT_NOT_SINGULAR
+    OK = 0,
+    EXPECT_VALUE,
+    INVALID_VALUE,
+    ROOT_NOT_SINGULAR
 };
 
 struct Json_value {
-	Json_type type;
+    Json_type type;
 };
 
 class Json
 {
 public:
-	Json();
-	~Json();
+    Json();
+    ~Json();
 
-	Json_state parse(Json_value* jv, const std::string& json_str);
+    Json_state parse(Json_value* jv, const std::string& json_str);
 };
 
 } // end of JsonParser
