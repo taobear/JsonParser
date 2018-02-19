@@ -84,10 +84,19 @@ static Json_state parse_value(Json_value *pval, const Json_Context* pjc)
 Json_state Json::parse(Json_value *pval, const std::string& json_str)
 {
     Json_Context jc;
+    Json_state   state;
 
     jc.json_str = json_str.c_str();
     skip_whitespace(&jc);
-    return parse_value(pval, &jc);
+    state = parse_value(pval, &jc);
+
+    if (state == Json_state::OK) {
+        skip_whitespace(&jc);
+        if (*jc.json_str != '\0')
+            state = Json_state::ROOT_NOT_SINGULAR;
+    }
+    
+    return state;
 }
 
 } // end of namespace JsonParser
