@@ -47,11 +47,40 @@ static void test_parse_true()
     EXPECT_EQ_INT(val.type, Json_type::JSON_TRUE);
 }
 
+static void test_parse_expect_value()
+{
+    Json       js;
+    Json_value val;
+
+    EXPECT_EQ_INT(js.parse(&val, ""), Json_state::EXPECT_VALUE);
+    EXPECT_EQ_INT(js.parse(&val, " "), Json_state::EXPECT_VALUE);
+}
+
+static void test_parse_invalid_value()
+{
+    Json       js;
+    Json_value val;
+
+    EXPECT_EQ_INT(js.parse(&val, "nul"), Json_state::INVALID_VALUE);
+    EXPECT_EQ_INT(js.parse(&val, "?"), Json_state::INVALID_VALUE);
+}
+
+static void test_parse_root_not_singular()
+{
+    Json       js;
+    Json_value val;
+
+    EXPECT_EQ_INT(js.parse(&val, "null x"), Json_state::ROOT_NOT_SINGULAR);
+}
+
 static void test_parse()
 {
     test_parse_null();
     test_parse_false();
     test_parse_true();
+    test_parse_expect_value();
+    test_parse_invalid_value();
+    test_parse_root_not_singular();
 }
 
 int main(int argc, char **argv)
