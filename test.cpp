@@ -20,57 +20,142 @@ static int test_pass = 0;
 #define EXPECT_EQ_INT(expect, actual) \
     EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%d")
 
+#define EXPECT_EQ_DOUBLE(expect, actual)\
+    EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%lf")
+
+#define TEST_ERROR(error, jstr) \
+    do {\
+        Json js; \
+        Json_value val; \
+        EXPECT_EQ_INT(js.parse(&val, jstr), error); \
+    } while (0)
+
+#define TEST_VALUE(expect_type, jstr) \
+    do { \
+        Json js; \
+        Json_value val; \
+        EXPECT_EQ_INT(js.parse(&val, jstr), Json_state::OK); \
+        EXPECT_EQ_INT(val.type, expect_type); \
+    } while (0)
+
+#define TEST_NUMBER(expect_num, jstr) \
+    do { \
+        Json js; \
+        Json_value val; \
+        EXPECT_EQ_INT(js.parse(&val, jstr), Json_state::OK); \
+        EXPECT_EQ_INT(val.type, Json_type::JSON_NUMBER); \
+        EXPECT_EQ_DOUBLE(expect_num, val.number); \
+    } while (0)
+
 static void test_parse_null() 
 {
-    Json       js;
-    Json_value val;
+    // Json       js;
+    // Json_value val;
 
-    EXPECT_EQ_INT(js.parse(&val, "null"), Json_state::OK);
-    EXPECT_EQ_INT(val.type, Json_type::JSON_NULL);
+    // EXPECT_EQ_INT(js.parse(&val, "null"), Json_state::OK);
+    // EXPECT_EQ_INT(val.type, Json_type::JSON_NULL);
+    TEST_VALUE(Json_type::JSON_NULL, "null");
 }
 
 static void test_parse_false()
 {
-    Json       js;
-    Json_value val;
+    // Json       js;
+    // Json_value val;
 
-    EXPECT_EQ_INT(js.parse(&val, "false"), Json_state::OK);
-    EXPECT_EQ_INT(val.type, Json_type::JSON_FALSE);
+    // EXPECT_EQ_INT(js.parse(&val, "false"), Json_state::OK);
+    // EXPECT_EQ_INT(val.type, Json_type::JSON_FALSE);
+    TEST_VALUE(Json_type::JSON_FALSE, "false");
 }
 
 static void test_parse_true()
 {
-    Json       js;
-    Json_value val;
+    // Json       js;
+    // Json_value val;
 
-    EXPECT_EQ_INT(js.parse(&val, "true"), Json_state::OK);
-    EXPECT_EQ_INT(val.type, Json_type::JSON_TRUE);
+    // EXPECT_EQ_INT(js.parse(&val, "true"), Json_state::OK);
+    // EXPECT_EQ_INT(val.type, Json_type::JSON_TRUE);
+    TEST_VALUE(Json_type::JSON_TRUE, "true");
 }
 
 static void test_parse_expect_value()
 {
-    Json       js;
-    Json_value val;
+    // Json       js;
+    // Json_value val;
 
-    EXPECT_EQ_INT(js.parse(&val, ""), Json_state::EXPECT_VALUE);
-    EXPECT_EQ_INT(js.parse(&val, " "), Json_state::EXPECT_VALUE);
+    // EXPECT_EQ_INT(js.parse(&val, ""), Json_state::EXPECT_VALUE);
+    // EXPECT_EQ_INT(js.parse(&val, " "), Json_state::EXPECT_VALUE);
+    TEST_ERROR(Json_state::EXPECT_VALUE, "");
+    TEST_ERROR(Json_state::EXPECT_VALUE, " ");
 }
 
 static void test_parse_invalid_value()
 {
-    Json       js;
-    Json_value val;
+    // Json       js;
+    // Json_value val;
 
-    EXPECT_EQ_INT(js.parse(&val, "nul"), Json_state::INVALID_VALUE);
-    EXPECT_EQ_INT(js.parse(&val, "?"), Json_state::INVALID_VALUE);
+    // EXPECT_EQ_INT(js.parse(&val, "nul"), Json_state::INVALID_VALUE);
+    // EXPECT_EQ_INT(js.parse(&val, "?"), Json_state::INVALID_VALUE);
+    TEST_ERROR(Json_state::INVALID_VALUE, "nul");
+    TEST_ERROR(Json_state::INVALID_VALUE, "?");
 }
 
 static void test_parse_root_not_singular()
 {
-    Json       js;
-    Json_value val;
+    // Json       js;
+    // Json_value val;
 
-    EXPECT_EQ_INT(js.parse(&val, "null x"), Json_state::ROOT_NOT_SINGULAR);
+    // EXPECT_EQ_INT(js.parse(&val, "null x"), Json_state::ROOT_NOT_SINGULAR);
+    TEST_ERROR(Json_state::ROOT_NOT_SINGULAR, "null x");
+}
+
+static void test_parse_number()
+{
+    TEST_NUMBER(0.0, "0");
+    TEST_NUMBER(0.0, "-0");
+    TEST_NUMBER(0.0, "-0.0");
+    TEST_NUMBER(1.0, "1");
+    TEST_NUMBER(-1.0, "-1");
+    TEST_NUMBER(1.5, "1.5");
+    TEST_NUMBER(-1.5, "-1.5");
+    TEST_NUMBER(3.1416, "3.1416");
+    TEST_NUMBER(1E10, "1E10");
+    TEST_NUMBER(1e10, "1e10");
+    TEST_NUMBER(1E+10, "1E+10");
+    TEST_NUMBER(1E-10, "1E-10");
+    TEST_NUMBER(-1E10, "-1E10");
+    TEST_NUMBER(-1e10, "-1e10");
+    TEST_NUMBER(-1E+10, "-1E+10");
+    TEST_NUMBER(-1E-10, "-1E-10");
+    TEST_NUMBER(1.234E+10, "1.234E+10");
+    TEST_NUMBER(1.234E-10, "1.234E-10");
+    TEST_NUMBER(0.0, "1e-10000"); /* must underflow */
+
+    /* the smallest number > 1 */
+    TEST_NUMBER(1.0000000000000002, "1.0000000000000002");
+    /* minimum denormal */
+    TEST_NUMBER( 4.9406564584124654e-324, "4.9406564584124654e-324");
+    TEST_NUMBER(-4.9406564584124654e-324, "-4.9406564584124654e-324");
+    /* Max subnormal double */
+    TEST_NUMBER( 2.2250738585072009e-308, "2.2250738585072009e-308");
+    TEST_NUMBER(-2.2250738585072009e-308, "-2.2250738585072009e-308");
+    /* Min normal positive double */
+    TEST_NUMBER( 2.2250738585072014e-308, "2.2250738585072014e-308");
+    TEST_NUMBER(-2.2250738585072014e-308, "-2.2250738585072014e-308");
+    /* Max double */
+    TEST_NUMBER( 1.7976931348623157e+308, "1.7976931348623157e+308");
+    TEST_NUMBER(-1.7976931348623157e+308, "-1.7976931348623157e+308");
+}
+
+static void test_parse_invalid_number()
+{
+    TEST_ERROR(Json_state::INVALID_VALUE, "+0");
+    TEST_ERROR(Json_state::INVALID_VALUE, "+1");
+    TEST_ERROR(Json_state::INVALID_VALUE, ".123"); /* at least one digit before '.' */
+    TEST_ERROR(Json_state::INVALID_VALUE, "1.");   /* at least one digit after '.' */
+    TEST_ERROR(Json_state::INVALID_VALUE, "INF");
+    TEST_ERROR(Json_state::INVALID_VALUE, "inf");
+    TEST_ERROR(Json_state::INVALID_VALUE, "NAN");
+    TEST_ERROR(Json_state::INVALID_VALUE, "nan");
 }
 
 static void test_parse()
@@ -81,6 +166,8 @@ static void test_parse()
     test_parse_expect_value();
     test_parse_invalid_value();
     test_parse_root_not_singular();
+    test_parse_number();
+    test_parse_invalid_number();
 }
 
 int main(int argc, char **argv)

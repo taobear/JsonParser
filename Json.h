@@ -19,11 +19,13 @@ enum Json_state {
     OK = 0,
     EXPECT_VALUE,
     INVALID_VALUE,
-    ROOT_NOT_SINGULAR
+    NUMBER_TOO_BIG,
+    ROOT_NOT_SINGULAR,
 };
 
 struct Json_value {
     Json_type type;
+    double    number;
 };
 
 class Json
