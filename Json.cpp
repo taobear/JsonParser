@@ -27,6 +27,7 @@ Json::~Json()
 
 struct Json_Context {
     mutable const char *json_str;
+    size_t json_len;
 };
 
 static void skip_whitespace(const Json_Context* pjc)
@@ -79,6 +80,7 @@ static Json_state parse_true(Json_value *pval, const Json_Context* pjc)
 static Json_state parse_number(Json_value *pval, const Json_Context* pjc)
 {
     const char *p = pjc->json_str;
+    double     &n = pval->number;
 
     if (*p == '-') p++;
 
@@ -109,13 +111,54 @@ static Json_state parse_number(Json_value *pval, const Json_Context* pjc)
             ;
     }
 
-    pval->number = std::strtod(pjc->json_str, NULL);
-    if (pval->number == HUGE_VAL || pval->number == -HUGE_VAL)
+    n = std::strtod(pjc->json_str, NULL);
+    if (n == HUGE_VAL || n == -HUGE_VAL)
         return Json_state::NUMBER_TOO_BIG;
 
     pjc->json_str = p;
     pval->type = Json_type::JSON_NUMBER;
     return Json_state::OK;
+}
+
+static Json_state parse_string(Json_value *pval, const Json_Context* pjc)
+{
+    ASSERT_STEP(pjc->json_str, '\"');
+
+    const char *&p = pjc->json_str;
+    std::string &s = pval->str;
+
+    // pval->type = Json_type::JSON_STRING;
+    // new (&s) std::string();
+    pval->init_str();
+
+    s.reserve(pjc->json_len);
+    while (true) {
+        char ch = *p++;
+        switch (ch) {
+            case '\"' : // end of qoutation
+                return Json_state::OK;
+            case '\\' : // escape char
+                switch (*p++) {
+                    case '\"' : s.push_back('\"'); break;
+                    case '\\' : s.push_back('\\'); break;
+                    case '/' :  s.push_back('/' ); break;
+                    case 'b' :  s.push_back('\b'); break;
+                    case 'f' :  s.push_back('\f'); break;
+                    case 'n' :  s.push_back('\n'); break;
+                    case 'r' :  s.push_back('\r'); break;
+                    case 't' :  s.push_back('\t'); break;
+                    default : return Json_state::INVALID_STRING_ESCAPE;
+                }
+                break;
+            case '\0' : // end of string
+                return Json_state::MISS_QUOTATION_MARK;
+            default :
+                if ((unsigned char)ch < 0x20) {
+                    return Json_state::INVALID_STRING_CHAR;
+                }
+                s.push_back(ch);
+        }
+    }
 }
 
 static Json_state parse_value(Json_value *pval, const Json_Context* pjc)
@@ -124,6 +167,7 @@ static Json_state parse_value(Json_value *pval, const Json_Context* pjc)
         case 'n' :  return parse_null(pval, pjc);
         case 'f' :  return parse_false(pval, pjc);
         case 't' :  return parse_true(pval, pjc);
+        case '\"' : return parse_string(pval, pjc);
         case '\0' : return Json_state::EXPECT_VALUE;
         // default :   return Json_state::INVALID_VALUE;
         default :   return parse_number(pval, pjc);
@@ -136,6 +180,8 @@ Json_state Json::parse(Json_value *pval, const std::string& json_str)
     Json_state   state;
 
     jc.json_str = json_str.c_str();
+    jc.json_len = json_str.size() + 1;
+
     skip_whitespace(&jc);
     state = parse_value(pval, &jc);
 

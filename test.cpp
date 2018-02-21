@@ -1,3 +1,8 @@
+#ifdef _WINDOWS
+#define _CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
+#endif
+
 #include "Json.h"
 using namespace JsonParser;
 
@@ -23,6 +28,10 @@ static int test_pass = 0;
 #define EXPECT_EQ_DOUBLE(expect, actual)\
     EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%lf")
 
+#define EXPECT_EQ_STRING(expect, actual) \
+    EXPECT_EQ_BASE((expect) == (actual), expect.c_str(), \
+    actual.c_str(), "%s")
+
 #define TEST_ERROR(error, jstr) \
     do {\
         Json js; \
@@ -45,6 +54,15 @@ static int test_pass = 0;
         EXPECT_EQ_INT(js.parse(&val, jstr), Json_state::OK); \
         EXPECT_EQ_INT(val.type, Json_type::JSON_NUMBER); \
         EXPECT_EQ_DOUBLE(expect_num, val.number); \
+    } while (0)
+
+#define TEST_STRING(expect_str,jstr) \
+    do { \
+        Json js; \
+        Json_value val; \
+        EXPECT_EQ_INT(js.parse(&val, jstr), Json_state::OK); \
+        EXPECT_EQ_INT(val.type, Json_type::JSON_STRING); \
+        EXPECT_EQ_STRING(std::string(expect_str), val.str); \
     } while (0)
 
 static void test_parse_null() 
@@ -158,20 +176,69 @@ static void test_parse_invalid_number()
     TEST_ERROR(Json_state::INVALID_VALUE, "nan");
 }
 
+static void test_parse_number_too_big()
+{
+    TEST_ERROR(Json_state::NUMBER_TOO_BIG, "1e309");
+    TEST_ERROR(Json_state::NUMBER_TOO_BIG, "-1e309");
+}
+
+static void test_parse_string()
+{
+    TEST_STRING("", "\"\"");
+    TEST_STRING("Hello", "\"Hello\"");
+    TEST_STRING("Hello\nWorld", "\"Hello\\nWorld\"");
+    TEST_STRING("\" \\ / \b \f \n \r \t", "\"\\\" \\\\ \\/ \\b \\f \\n \\r \\t\"");
+}
+
+static void test_parse_missing_quotation_mark()
+{
+    TEST_ERROR(Json_state::MISS_QUOTATION_MARK, "\"");
+    TEST_ERROR(Json_state::MISS_QUOTATION_MARK, "\"abc");
+}
+
+static void test_parse_invaild_string_escape()
+{
+#if 1
+    TEST_ERROR(INVALID_STRING_ESCAPE, "\"\\v\"");
+    TEST_ERROR(INVALID_STRING_ESCAPE, "\"\\'\"");
+    TEST_ERROR(INVALID_STRING_ESCAPE, "\"\\0\"");
+    TEST_ERROR(INVALID_STRING_ESCAPE, "\"\\x12\"");
+#endif
+}
+
+static void test_parse_invalid_string_char() 
+{
+#if 1
+    TEST_ERROR(INVALID_STRING_CHAR, "\"\x01\"");
+    TEST_ERROR(INVALID_STRING_CHAR, "\"\x1F\"");
+#endif
+}
+
 static void test_parse()
 {
     test_parse_null();
     test_parse_false();
     test_parse_true();
+
     test_parse_expect_value();
     test_parse_invalid_value();
     test_parse_root_not_singular();
+
     test_parse_number();
     test_parse_invalid_number();
+    test_parse_number_too_big();
+
+    test_parse_string();
+    test_parse_missing_quotation_mark();
+    test_parse_invaild_string_escape();
+    test_parse_invalid_string_char();
 }
 
 int main(int argc, char **argv)
 {
+#ifdef _WINDOWS
+    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+#endif
     test_parse();
     printf("%d/%d (%3.2f%%) passed\n", test_pass, test_count, test_pass * 100.0 / test_count);
     return main_ret;

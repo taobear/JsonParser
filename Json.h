@@ -21,11 +21,25 @@ enum Json_state {
     INVALID_VALUE,
     NUMBER_TOO_BIG,
     ROOT_NOT_SINGULAR,
+    MISS_QUOTATION_MARK,
+    INVALID_STRING_CHAR,
+    INVALID_STRING_ESCAPE
 };
 
 struct Json_value {
+    Json_value() : type(Json_type::JSON_NULL), number(0) {}
+    ~Json_value() { if (type == Json_type::JSON_STRING) str.std::string::~string(); }
+
+    void init_str() { 
+        type = Json_type::JSON_STRING; 
+        new (&str) std::string();
+    }
+
+    union {
+        std::string str;
+        double      number;
+    };
     Json_type type;
-    double    number;
 };
 
 class Json
