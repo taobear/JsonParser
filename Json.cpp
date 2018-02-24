@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cerrno>
 #include <cmath>
+#include <cstring>
 
 #define ASSERT_STEP(pStr, c) \
     do { \
@@ -13,7 +14,7 @@
 
 #define ISDIGIT_0TO9(c) (c >= '0' && c <= '9')
 #define ISDIGIT_1TO9(c) (c >= '1' && c <= '9')
-
+#define PUTC(s, c) s.push_back(c)
 namespace JsonParser
 {
 
@@ -23,6 +24,19 @@ Json::Json()
 
 Json::~Json()
 {
+}
+
+Json_value::Json_value()
+{
+    str.pch = nullptr;
+    str.len = 0;
+}
+
+Json_value::~Json_value()
+{
+    if (type == Json_type::JSON_STRING) 
+        free(str.pch);
+    type = Json_type::JSON_NULL;
 }
 
 struct Json_Context {
@@ -120,33 +134,93 @@ static Json_state parse_number(Json_value *pval, const Json_Context* pjc)
     return Json_state::OK;
 }
 
+static bool parse_hex4(unsigned& u, const char *&p)
+{
+    u = 0;
+    for (int i = 0; i < 4; ++i) {
+        char ch = *p++;
+        u <<= 4;
+        if      (ch >= '0' && ch <= '9') u |= ch - '0';
+        else if (ch >= 'A' && ch <= 'F') u |= (ch - 'A') + 10;
+        else if (ch >= 'a' && ch <= 'f') u |= (ch - 'a') + 10;
+        else return false;
+    }
+    return true;
+}
+
+static void encode_utf8(std::string &s, unsigned u)
+{
+    if (u <= 0x7F) {
+        PUTC(s, u & 0xFF);
+    } else if (u <= 0x7FF) {
+        PUTC(s, 0xC0 | ((u >> 6) & 0xFF));
+        PUTC(s, 0x80 | ( u       & 0x3F));
+    } else if (u <= 0xFFFF) {
+        PUTC(s, 0xE0 | ((u >> 12) & 0xFF));
+        PUTC(s, 0x80 | ((u >>  6) & 0x3F));
+        PUTC(s, 0x80 | ( u        & 0x3F));
+    } else {
+        assert(u <= 0x10FFFF);
+        PUTC(s, 0xF0 | ((u >> 18) & 0xFF));
+        PUTC(s, 0x80 | ((u >> 12) & 0x3F));
+        PUTC(s, 0x80 | ((u >>  6) & 0x3F));
+        PUTC(s, 0x80 | ( u        & 0x3F));
+    }
+}
+
+static void set_value_string(Json_value *pval, const std::string& s)
+{
+    size_t len = s.size();
+    pval->str.len = len;
+    pval->str.pch = (char*)malloc(len + 1);
+    memcpy(pval->str.pch, s.c_str(), len);
+    pval->str.pch[len] = '\0';
+    pval->type = JSON_STRING;
+}
+
 static Json_state parse_string(Json_value *pval, const Json_Context* pjc)
 {
     ASSERT_STEP(pjc->json_str, '\"');
 
     const char *&p = pjc->json_str;
-    std::string &s = pval->str;
+    unsigned u, u2;
 
-    // pval->type = Json_type::JSON_STRING;
-    // new (&s) std::string();
-    pval->init_str();
-
+    std::string s;
     s.reserve(pjc->json_len);
+
     while (true) {
         char ch = *p++;
         switch (ch) {
             case '\"' : // end of qoutation
+                set_value_string(pval, s);
                 return Json_state::OK;
             case '\\' : // escape char
                 switch (*p++) {
-                    case '\"' : s.push_back('\"'); break;
-                    case '\\' : s.push_back('\\'); break;
-                    case '/' :  s.push_back('/' ); break;
-                    case 'b' :  s.push_back('\b'); break;
-                    case 'f' :  s.push_back('\f'); break;
-                    case 'n' :  s.push_back('\n'); break;
-                    case 'r' :  s.push_back('\r'); break;
-                    case 't' :  s.push_back('\t'); break;
+                    case '\"' : PUTC(s, '\"'); break;
+                    case '\\' : PUTC(s, '\\'); break;
+                    case '/' :  PUTC(s, '/') ; break;
+                    case 'b' :  PUTC(s, '\b'); break;
+                    case 'f' :  PUTC(s, '\f'); break;
+                    case 'n' :  PUTC(s, '\n'); break;
+                    case 'r' :  PUTC(s, '\r'); break;
+                    case 't' :  PUTC(s, '\t'); break;
+                    case 'u' :  
+                        if (!parse_hex4(u, p))
+                            return Json_state::INVALID_UNICODE_HEX;
+                        if (u >= 0xD800 && u <= 0xDBFF) {
+                            if (*p++ != '\\')
+                                return Json_state::INVALID_UNICODE_SURROGATE;
+                            if (*p++ != 'u')
+                                return Json_state::INVALID_UNICODE_SURROGATE;
+                            if (!parse_hex4(u2, p))
+                                return Json_state::INVALID_UNICODE_HEX;
+                            if (u2 < 0xDC00 || u2 > 0xDFFF)
+                                return Json_state::INVALID_UNICODE_SURROGATE;
+                            u = (((u - 0xD800) << 10) | (u2 - 0xDC00)) + 0x10000;
+                        }
+                        encode_utf8(s, u);
+                        break;
+                    ;
                     default : return Json_state::INVALID_STRING_ESCAPE;
                 }
                 break;
@@ -156,7 +230,7 @@ static Json_state parse_string(Json_value *pval, const Json_Context* pjc)
                 if ((unsigned char)ch < 0x20) {
                     return Json_state::INVALID_STRING_CHAR;
                 }
-                s.push_back(ch);
+                PUTC(s, ch);
         }
     }
 }

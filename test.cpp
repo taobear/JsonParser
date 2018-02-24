@@ -4,6 +4,7 @@
 #endif
 
 #include "Json.h"
+#include <cstring>
 using namespace JsonParser;
 
 static int main_ret = 0;
@@ -28,9 +29,9 @@ static int test_pass = 0;
 #define EXPECT_EQ_DOUBLE(expect, actual)\
     EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%lf")
 
-#define EXPECT_EQ_STRING(expect, actual) \
-    EXPECT_EQ_BASE((expect) == (actual), expect.c_str(), \
-    actual.c_str(), "%s")
+#define EXPECT_EQ_STRING(expect, actual, alen) \
+    EXPECT_EQ_BASE(sizeof(expect) - 1 == alen && \
+                   memcmp(expect, actual, alen) == 0, expect, actual, "%s")
 
 #define TEST_ERROR(error, jstr) \
     do {\
@@ -62,7 +63,7 @@ static int test_pass = 0;
         Json_value val; \
         EXPECT_EQ_INT(js.parse(&val, jstr), Json_state::OK); \
         EXPECT_EQ_INT(val.type, Json_type::JSON_STRING); \
-        EXPECT_EQ_STRING(std::string(expect_str), val.str); \
+        EXPECT_EQ_STRING(expect_str, val.str.pch, val.str.len); \
     } while (0)
 
 static void test_parse_null() 
@@ -188,6 +189,13 @@ static void test_parse_string()
     TEST_STRING("Hello", "\"Hello\"");
     TEST_STRING("Hello\nWorld", "\"Hello\\nWorld\"");
     TEST_STRING("\" \\ / \b \f \n \r \t", "\"\\\" \\\\ \\/ \\b \\f \\n \\r \\t\"");
+    
+    TEST_STRING("Hello\0World", "\"Hello\\u0000World\"");
+    TEST_STRING("\x24", "\"\\u0024\""); /*Dollar sign U+0024 */
+    TEST_STRING("\xC2\xA2", "\"\\u00A2\""); /* Cents sign U+20AC */
+    TEST_STRING("\xE2\x82\xAC", "\"\\u20AC\""); /* Euro sign U+20AC */
+    TEST_STRING("\xF0\x9D\x84\x9E", "\"\\uD834\\uDD1E\""); /* G clef sign U+1D11E */
+    TEST_STRING("\xF0\x9D\x84\x9E", "\"\\ud834\\udd1e\""); /* G clef sign U+1D11E */
 }
 
 static void test_parse_missing_quotation_mark()
@@ -196,7 +204,7 @@ static void test_parse_missing_quotation_mark()
     TEST_ERROR(Json_state::MISS_QUOTATION_MARK, "\"abc");
 }
 
-static void test_parse_invaild_string_escape()
+static void test_parse_invalid_string_escape()
 {
 #if 1
     TEST_ERROR(INVALID_STRING_ESCAPE, "\"\\v\"");
@@ -212,6 +220,33 @@ static void test_parse_invalid_string_char()
     TEST_ERROR(INVALID_STRING_CHAR, "\"\x01\"");
     TEST_ERROR(INVALID_STRING_CHAR, "\"\x1F\"");
 #endif
+}
+
+static void test_parse_invalid_unicode_hex()
+{
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u0\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u01\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u012\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u/000\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\uG000\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u0/00\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u0G00\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u0/00\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u00G0\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u000/\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u000G\"");
+    TEST_ERROR(INVALID_UNICODE_HEX, "\"\\u 123\"");
+}
+
+static void test_parse_invalid_unicode_surrogate()
+{
+    TEST_ERROR(INVALID_UNICODE_SURROGATE, "\"\\uD800\"");
+    TEST_ERROR(INVALID_UNICODE_SURROGATE, "\"\\uDBFF\"");
+    TEST_ERROR(INVALID_UNICODE_SURROGATE, "\"\\uD800\\\\\"");
+    TEST_ERROR(INVALID_UNICODE_SURROGATE, "\"\\uD800\\uDBFF\"");
+    TEST_ERROR(INVALID_UNICODE_SURROGATE, "\"\\uD800\\uE000\"");
+
 }
 
 static void test_parse()
@@ -230,8 +265,10 @@ static void test_parse()
 
     test_parse_string();
     test_parse_missing_quotation_mark();
-    test_parse_invaild_string_escape();
+    test_parse_invalid_string_escape();
     test_parse_invalid_string_char();
+    test_parse_invalid_unicode_hex();
+    test_parse_invalid_unicode_surrogate();
 }
 
 int main(int argc, char **argv)
