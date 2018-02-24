@@ -25,7 +25,8 @@ enum Json_state {
     INVALID_STRING_CHAR,
     INVALID_STRING_ESCAPE,
     INVALID_UNICODE_HEX,
-    INVALID_UNICODE_SURROGATE
+    INVALID_UNICODE_SURROGATE,
+    MISS_COMMA_OR_SQUARE_BRACKET
 };
 
 struct Json_value {
@@ -33,6 +34,7 @@ struct Json_value {
     ~Json_value();
 
     union {
+        struct { Json_value *elem; size_t size; } arr;
         struct { char *pch; size_t len; } str;
         double number;
     };

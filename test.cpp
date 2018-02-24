@@ -66,6 +66,12 @@ static int test_pass = 0;
         EXPECT_EQ_STRING(expect_str, val.str.pch, val.str.len); \
     } while (0)
 
+#if defined(_MSC_VER)
+#define EXPECT_EQ_SIZE_T(expect, actual) EXPECT_EQ_BASE((expect) == (actual), (size_t)expect, (size_t)actual, "%Iu")
+#else
+#define EXPECT_EQ_SIZE_T(expect, actual) EXPECT_EQ_BASE((expect) == (actual), (size_t)expect, (size_t)actual, "%zu")
+#endif
+
 static void test_parse_null() 
 {
     // Json       js;
@@ -249,6 +255,76 @@ static void test_parse_invalid_unicode_surrogate()
 
 }
 
+static void test_parse_array()
+{
+    {
+        Json js;
+        Json_value val;
+
+        EXPECT_EQ_INT(Json_state::OK, js.parse(&val, "[ ]"));
+        EXPECT_EQ_INT(Json_type::JSON_ARRAY, val.type);
+        EXPECT_EQ_SIZE_T(0, val.arr.size);
+    }
+
+    {
+        Json js;
+        Json_value val;
+
+        EXPECT_EQ_INT(Json_state::OK,
+                      js.parse(&val, "[ null , false , true , 123 , \"abc\"]"));
+
+        auto &size = val.arr.size;
+        auto &elem = val.arr.elem;
+
+        EXPECT_EQ_INT(Json_type::JSON_ARRAY, val.type);
+        EXPECT_EQ_SIZE_T(5, size);
+
+        EXPECT_EQ_INT(Json_type::JSON_NULL,   elem[0].type);
+        EXPECT_EQ_INT(Json_type::JSON_FALSE,  elem[1].type);
+        EXPECT_EQ_INT(Json_type::JSON_TRUE,   elem[2].type);
+        EXPECT_EQ_INT(Json_type::JSON_NUMBER, elem[3].type);
+        EXPECT_EQ_INT(Json_type::JSON_STRING, elem[4].type);
+
+        EXPECT_EQ_DOUBLE(123.0, elem[3].number);
+        EXPECT_EQ_STRING("abc", elem[4].str.pch, 3);
+    }
+
+    {
+        Json js;
+        Json_value val;
+
+        EXPECT_EQ_INT(Json_state::OK,
+                      js.parse(&val, "[ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ]"));
+
+        auto &lv1_size = val.arr.size;
+        auto &lv1_elem = val.arr.elem;
+
+        EXPECT_EQ_INT(Json_type::JSON_ARRAY, val.type);
+        EXPECT_EQ_SIZE_T(4, lv1_size);
+
+        for (size_t i = 0; i < 4; ++i) {
+            auto &lv2_size = lv1_elem[i].arr.size;
+            auto &lv2_elem = lv1_elem[i].arr.elem;
+
+            EXPECT_EQ_INT(Json_type::JSON_ARRAY, lv1_elem[i].type);
+            EXPECT_EQ_SIZE_T(i, lv2_size);
+
+            for (size_t j = 0; j < i; ++j) {
+                EXPECT_EQ_INT(Json_type::JSON_NUMBER, lv2_elem[j].type);
+                EXPECT_EQ_DOUBLE((double)j, lv2_elem[j].number);
+            }
+        }
+    }
+}
+
+static void test_parse_miss_comma_or_square_bracket()
+{
+    TEST_ERROR(Json_state::MISS_COMMA_OR_SQUARE_BRACKET, "[1");
+    TEST_ERROR(Json_state::MISS_COMMA_OR_SQUARE_BRACKET, "[1}");
+    TEST_ERROR(Json_state::MISS_COMMA_OR_SQUARE_BRACKET, "[1 2");
+    TEST_ERROR(Json_state::MISS_COMMA_OR_SQUARE_BRACKET, "[[]");
+}
+
 static void test_parse()
 {
     test_parse_null();
@@ -269,6 +345,9 @@ static void test_parse()
     test_parse_invalid_string_char();
     test_parse_invalid_unicode_hex();
     test_parse_invalid_unicode_surrogate();
+
+    test_parse_array();
+    test_parse_miss_comma_or_square_bracket();
 }
 
 int main(int argc, char **argv)

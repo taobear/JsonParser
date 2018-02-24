@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #define ASSERT_STEP(pStr, c) \
     do { \
@@ -34,8 +35,13 @@ Json_value::Json_value()
 
 Json_value::~Json_value()
 {
-    if (type == Json_type::JSON_STRING) 
+    if (type == Json_type::JSON_STRING) {
         free(str.pch);
+        str.pch = nullptr;
+    } else if (type == Json_type::JSON_ARRAY) {
+        delete []arr.elem;
+        arr.elem = nullptr;
+    }
     type = Json_type::JSON_NULL;
 }
 
@@ -178,7 +184,71 @@ static void set_value_string(Json_value *pval, const std::string& s)
     pval->type = JSON_STRING;
 }
 
-static Json_state parse_string(Json_value *pval, const Json_Context* pjc)
+static void transfer_value_array(Json_value *pval,
+                                 std::vector<Json_value *>& pv_vec)
+{
+    size_t size = pv_vec.size();
+    pval->arr.size = size;
+    pval->arr.elem = new Json_value[size];
+    for (size_t i = 0; i < size; ++i) {
+        memcpy(pval->arr.elem + i, pv_vec[i], sizeof(Json_value)); // shallow copy
+        free(pv_vec[i]); // not delete
+        pv_vec[i] = nullptr;
+    }
+    pval->type = Json_type::JSON_ARRAY;
+}
+
+static Json_state parse_value(Json_value *pval, const Json_Context *pjc);
+
+static Json_state parse_array(Json_value *pval, const Json_Context *pjc)
+{
+    ASSERT_STEP(pjc->json_str, '[');
+
+    skip_whitespace(pjc);
+
+    if (*pjc->json_str == ']') {
+        pjc->json_str++;
+        pval->type = JSON_ARRAY;
+        pval->arr.size = 0;
+        pval->arr.elem = NULL;
+        return Json_state::OK;
+    } 
+
+    Json_state ret_state;
+    std::vector<Json_value*> pv_vec;
+
+    auto del_pv = [](const std::vector<Json_value*>& pvec) {
+        for (auto & e : pvec)
+            delete e;
+    };
+
+    while (true) { 
+        Json_value *pv_tmp = (Json_value*)malloc(sizeof(Json_value)); 
+        pv_vec.push_back(pv_tmp);
+
+        skip_whitespace(pjc); 
+        ret_state = parse_value(pv_tmp, pjc);
+        if (ret_state != Json_state::OK) {
+            del_pv(pv_vec);
+            return ret_state;
+        } 
+
+        skip_whitespace(pjc);
+        if (*pjc->json_str == ',') {
+            pjc->json_str++;
+        } else if (*pjc->json_str == ']') {
+            pjc->json_str++;
+            transfer_value_array(pval, pv_vec);
+            return Json_state::OK;
+        } else {
+            del_pv(pv_vec);
+            return Json_state::MISS_COMMA_OR_SQUARE_BRACKET;
+        }
+    }
+
+}
+
+static Json_state parse_string(Json_value *pval, const Json_Context *pjc)
 {
     ASSERT_STEP(pjc->json_str, '\"');
 
@@ -220,7 +290,7 @@ static Json_state parse_string(Json_value *pval, const Json_Context* pjc)
                         }
                         encode_utf8(s, u);
                         break;
-                    ;
+                    
                     default : return Json_state::INVALID_STRING_ESCAPE;
                 }
                 break;
@@ -242,6 +312,7 @@ static Json_state parse_value(Json_value *pval, const Json_Context* pjc)
         case 'f' :  return parse_false(pval, pjc);
         case 't' :  return parse_true(pval, pjc);
         case '\"' : return parse_string(pval, pjc);
+        case '['  : return parse_array(pval, pjc);
         case '\0' : return Json_state::EXPECT_VALUE;
         // default :   return Json_state::INVALID_VALUE;
         default :   return parse_number(pval, pjc);
