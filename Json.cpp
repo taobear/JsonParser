@@ -13,8 +13,8 @@
         pStr++; \
     } while (0)
 
-#define ISDIGIT_0TO9(c) (c >= '0' && c <= '9')
-#define ISDIGIT_1TO9(c) (c >= '1' && c <= '9')
+#define ISDIGIT_0TO9(c) ((c) >= '0' && (c) <= '9')
+#define ISDIGIT_1TO9(c) ((c) >= '1' && (c) <= '9')
 #define PUTC(s, c) s.push_back(c)
 namespace JsonParser
 {
@@ -31,7 +31,7 @@ Json_value::Json_value()
 {
     str.pch = nullptr;
     str.len = 0;
-    type == Json_type::JSON_NULL;
+    type = Json_type::JSON_NULL;
 }
 
 Json_value::~Json_value()
@@ -121,7 +121,7 @@ static Json_state parse_number(Json_value *pval, const Json_Context* pjc)
     } else {
         if (!ISDIGIT_1TO9(*p)) 
             return Json_state::INVALID_VALUE;
-        while (ISDIGIT_0TO9(*++p))
+        for (++p; ISDIGIT_0TO9(*p); ++p)
             ;
     }
 
@@ -129,7 +129,7 @@ static Json_state parse_number(Json_value *pval, const Json_Context* pjc)
         p++;
         if (!ISDIGIT_0TO9(*p)) 
             return Json_state::INVALID_VALUE;
-        while (ISDIGIT_0TO9(*++p))
+        for (++p; ISDIGIT_0TO9(*p); ++p)
             ;
     }
 
@@ -139,7 +139,7 @@ static Json_state parse_number(Json_value *pval, const Json_Context* pjc)
             p++;
         if (!ISDIGIT_0TO9(*p))
             return Json_state::INVALID_VALUE;
-        while (ISDIGIT_0TO9(*++p))
+        for (++p; ISDIGIT_0TO9(*p); ++p)
             ;
     }
 
@@ -336,7 +336,7 @@ static Json_state parse_array(Json_value *pval, const Json_Context *pjc)
 
 }
 
-static Json_state transfer_value_object(Json_value *pval,
+static void transfer_value_object(Json_value *pval,
                                         std::vector<Json_member *> pjm)
 {
     size_t size = pjm.size();
@@ -348,6 +348,7 @@ static Json_state transfer_value_object(Json_value *pval,
         pjm[i] = nullptr;
     }
     pval->type = Json_type::JSON_OBJECT;
+
 }
 
 static Json_state parse_object(Json_value *pval, const Json_Context *pjc)
@@ -442,6 +443,7 @@ Json_state Json::parse(Json_value *pval, const std::string& json_str)
 
     jc.json_str = json_str.c_str();
     jc.json_len = json_str.size() + 1;
+    assert(jc.json_str[json_str.size()] == '\0');
 
     skip_whitespace(&jc);
     state = parse_value(pval, &jc);

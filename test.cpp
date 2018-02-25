@@ -23,7 +23,7 @@ static int test_pass = 0;
     EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%d")
 
 #define EXPECT_EQ_DOUBLE(expect, actual)\
-    EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%lf")
+    EXPECT_EQ_BASE(std::abs(expect - actual) < 1e-10, expect, actual, "%lf")
 
 #define EXPECT_EQ_STRING(expect, actual, alen) \
     EXPECT_EQ_BASE(sizeof(expect) - 1 == alen && \
@@ -39,23 +39,23 @@ static int test_pass = 0;
     do {\
         Json js; \
         Json_value val; \
-        EXPECT_EQ_INT(js.parse(&val, jstr), error); \
+        EXPECT_EQ_INT(error, js.parse(&val, jstr)); \
     } while (0)
 
 #define TEST_VALUE(expect_type, jstr) \
     do { \
         Json js; \
         Json_value val; \
-        EXPECT_EQ_INT(js.parse(&val, jstr), Json_state::OK); \
-        EXPECT_EQ_INT(val.type, expect_type); \
+        EXPECT_EQ_INT(Json_state::OK, js.parse(&val, jstr)); \
+        EXPECT_EQ_INT(expect_type, val.type); \
     } while (0)
 
 #define TEST_NUMBER(expect_num, jstr) \
     do { \
         Json js; \
         Json_value val; \
-        EXPECT_EQ_INT(js.parse(&val, jstr), Json_state::OK); \
-        EXPECT_EQ_INT(val.type, Json_type::JSON_NUMBER); \
+        EXPECT_EQ_INT(Json_state::OK, js.parse(&val, jstr)); \
+        EXPECT_EQ_INT(Json_type::JSON_NUMBER, val.type); \
         EXPECT_EQ_DOUBLE(expect_num, val.number); \
     } while (0)
 
@@ -63,8 +63,8 @@ static int test_pass = 0;
     do { \
         Json js; \
         Json_value val; \
-        EXPECT_EQ_INT(js.parse(&val, jstr), Json_state::OK); \
-        EXPECT_EQ_INT(val.type, Json_type::JSON_STRING); \
+        EXPECT_EQ_INT(Json_state::OK, js.parse(&val, jstr)); \
+        EXPECT_EQ_INT(Json_type::JSON_STRING, val.type); \
         EXPECT_EQ_STRING(expect_str, val.str.pch, val.str.len); \
     } while (0)
 
