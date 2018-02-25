@@ -1,5 +1,10 @@
 #ifndef __JSONPARSER_JSON_H_
 #define __JSONPARSER_JSON_H_
+#ifdef _WINDOWS
+#define _CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
+#endif
+
 #include <string>
 
 namespace JsonParser
@@ -62,6 +67,7 @@ public:
     ~Json();
 
     Json_state parse(Json_value* jv, const std::string& json_str);
+    void stringify(std::string& json_str, const Json_value* jv);
 };
 
 } // end of JsonParser

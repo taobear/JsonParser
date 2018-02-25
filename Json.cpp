@@ -31,7 +31,7 @@ Json_value::Json_value()
 {
     str.pch = nullptr;
     str.len = 0;
-    type == Json_type::JSON_NULL;
+    type = Json_type::JSON_NULL;
 }
 
 Json_value::~Json_value()
@@ -336,7 +336,7 @@ static Json_state parse_array(Json_value *pval, const Json_Context *pjc)
 
 }
 
-static Json_state transfer_value_object(Json_value *pval,
+static void transfer_value_object(Json_value *pval,
                                         std::vector<Json_member *> pjm)
 {
     size_t size = pjm.size();
