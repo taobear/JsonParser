@@ -478,12 +478,19 @@ static void test_parse()
     test_parse_miss_comma_or_curly_bracket();
 }
 
+
+static void test_stringify()
+{
+
+}
+
 int main(int argc, char **argv)
 {
 #ifdef _WINDOWS
     _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
     test_parse();
+    test_stringify();
     printf("%d/%d (%3.2f%%) passed\n", test_pass, test_count, test_pass * 100.0 / test_count);
     return main_ret;
 }
