@@ -26,19 +26,33 @@ enum Json_state {
     INVALID_STRING_ESCAPE,
     INVALID_UNICODE_HEX,
     INVALID_UNICODE_SURROGATE,
-    MISS_COMMA_OR_SQUARE_BRACKET
+    MISS_COMMA_OR_SQUARE_BRACKET,
+    MISS_KEY,
+    MISS_COLON,
+    MISS_COMMA_OR_CURLY_BRACKET
 };
+
+struct Json_member;
 
 struct Json_value {
     Json_value();
     ~Json_value();
 
     union {
+        struct { Json_member *mem; size_t size; } obj;
         struct { Json_value *elem; size_t size; } arr;
         struct { char *pch; size_t len; } str;
         double number;
     };
     Json_type type;
+};
+
+struct Json_member {
+    Json_member();
+    ~Json_member();
+
+    char *key; size_t klen;
+    Json_value val;
 };
 
 class Json

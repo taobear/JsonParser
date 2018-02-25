@@ -1,9 +1,5 @@
-#ifdef _WINDOWS
-#define _CRTDBG_MAP_ALLOC
-#include <crtdbg.h>
-#endif
-
 #include "Json.h"
+
 #include <cstring>
 using namespace JsonParser;
 
@@ -32,6 +28,12 @@ static int test_pass = 0;
 #define EXPECT_EQ_STRING(expect, actual, alen) \
     EXPECT_EQ_BASE(sizeof(expect) - 1 == alen && \
                    memcmp(expect, actual, alen) == 0, expect, actual, "%s")
+
+#define EXPECT_TRUE(actual) \
+    EXPECT_EQ_BASE((actual) != 0, "true", "false", "%s")
+
+#define EXPECT_FALSE(actual) \
+    EXPECT_EQ_BASE((actual) == 0, "false", "true", "%s")
 
 #define TEST_ERROR(error, jstr) \
     do {\
@@ -325,6 +327,127 @@ static void test_parse_miss_comma_or_square_bracket()
     TEST_ERROR(Json_state::MISS_COMMA_OR_SQUARE_BRACKET, "[[]");
 }
 
+static void test_parse_object()
+{
+    {
+        Json js;
+        Json_value val;
+
+        EXPECT_EQ_INT(Json_state::OK, js.parse(&val, " { } "));
+        EXPECT_EQ_INT(Json_type::JSON_OBJECT, val.type);
+        EXPECT_EQ_SIZE_T(0, val.obj.size);
+    }
+
+#if 1
+    {
+        Json js;
+        Json_value val;
+
+        EXPECT_EQ_INT(Json_state::OK, js.parse(&val, 
+            " { "
+            "\"n\" : null , "
+            "\"f\" : false , "
+            "\"t\" : true , "
+            "\"i\" : 123 , "
+            "\"s\" : \"abc\", "
+            "\"a\" : [ 1, 2, 3 ] , "
+            "\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }"
+            " } "
+        ));
+
+        auto &lv1_size = val.obj.size;
+        auto &lv1_mem = val.obj.mem;
+
+        EXPECT_EQ_INT(Json_type::JSON_OBJECT, val.type);
+        EXPECT_EQ_SIZE_T(7, val.obj.size);
+
+        EXPECT_EQ_STRING("n", lv1_mem[0].key, lv1_mem[0].klen);
+        EXPECT_EQ_INT(Json_type::JSON_NULL, lv1_mem[0].val.type);
+
+        EXPECT_EQ_STRING("f", lv1_mem[1].key, lv1_mem[1].klen);
+        EXPECT_EQ_INT(Json_type::JSON_FALSE, lv1_mem[1].val.type);
+
+        EXPECT_EQ_STRING("t", lv1_mem[2].key, lv1_mem[2].klen);
+        EXPECT_EQ_INT(Json_type::JSON_TRUE, lv1_mem[2].val.type);
+
+        EXPECT_EQ_STRING("i", lv1_mem[3].key, lv1_mem[3].klen);
+        EXPECT_EQ_INT(Json_type::JSON_NUMBER, lv1_mem[3].val.type);
+        EXPECT_EQ_DOUBLE(123.0, lv1_mem[3].val.number);
+
+        EXPECT_EQ_STRING("s", lv1_mem[4].key, lv1_mem[4].klen);
+        EXPECT_EQ_INT(Json_type::JSON_STRING, lv1_mem[4].val.type);
+        EXPECT_EQ_STRING("abc", lv1_mem[4].val.str.pch, lv1_mem[4].val.str.len);
+
+        EXPECT_EQ_STRING("a", lv1_mem[5].key, lv1_mem[5].klen);
+        {
+            auto &lv2_type = lv1_mem[5].val.type;
+            auto &lv2_size = lv1_mem[5].val.arr.size;
+            auto &lv2_elem = lv1_mem[5].val.arr.elem;
+
+            EXPECT_EQ_INT(Json_type::JSON_ARRAY, lv2_type);
+            EXPECT_EQ_SIZE_T(3, lv2_size);
+
+            for (size_t i = 0; i < 3; ++i) {
+                EXPECT_EQ_INT(Json_type::JSON_NUMBER, lv2_elem[i].type);
+                EXPECT_EQ_DOUBLE(i + 1.0, lv2_elem[i].number);
+            }
+        }
+
+        EXPECT_EQ_STRING("o", lv1_mem[6].key, lv1_mem[6].klen);
+        {
+            auto &lv2_type = lv1_mem[6].val.type;
+            auto &lv2_size = lv1_mem[6].val.obj.size;
+            auto &lv2_mem  = lv1_mem[6].val.obj.mem;
+
+            EXPECT_EQ_INT(Json_type::JSON_OBJECT, lv2_type);
+            EXPECT_EQ_SIZE_T(3, lv2_size);
+
+            for (size_t i = 0; i < 3; ++i) {
+                // key
+                EXPECT_TRUE('1' + i == lv2_mem[i].key[0]);
+                EXPECT_EQ_SIZE_T(1, lv2_mem[i].klen);
+
+                // number
+                EXPECT_EQ_INT(Json_type::JSON_NUMBER, lv2_mem[i].val.type);
+                EXPECT_EQ_DOUBLE(i + 1.0, lv2_mem[i].val.number);
+            }
+        }
+    }
+#endif
+}
+
+static void test_parse_miss_key()
+{
+#if 1
+    TEST_ERROR(Json_state::MISS_KEY, "{:1,");
+    TEST_ERROR(Json_state::MISS_KEY, "{1:1,");
+    TEST_ERROR(Json_state::MISS_KEY, "{true:1,");
+    TEST_ERROR(Json_state::MISS_KEY, "{false:1,");
+    TEST_ERROR(Json_state::MISS_KEY, "{null:1,");
+    TEST_ERROR(Json_state::MISS_KEY, "{[]:1,");
+    TEST_ERROR(Json_state::MISS_KEY, "{{}:1,");
+    TEST_ERROR(Json_state::MISS_KEY, "{\"a\":1,");
+#endif
+}
+
+static void test_parse_miss_colon()
+{
+#if 1
+    TEST_ERROR(Json_state::MISS_COLON, "{\"a\"}");
+    TEST_ERROR(Json_state::MISS_COLON, "{\"a\",\"b\"}");
+#endif
+}
+
+static void test_parse_miss_comma_or_curly_bracket()
+{
+#if 1
+    TEST_ERROR(Json_state::MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1");
+    TEST_ERROR(Json_state::MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1]");
+    TEST_ERROR(Json_state::MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1 \"b\"");
+    TEST_ERROR(Json_state::MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":{}");
+#endif
+}
+
 static void test_parse()
 {
     test_parse_null();
@@ -348,6 +471,11 @@ static void test_parse()
 
     test_parse_array();
     test_parse_miss_comma_or_square_bracket();
+
+    test_parse_object();
+    test_parse_miss_key();
+    test_parse_miss_colon();
+    test_parse_miss_comma_or_curly_bracket();
 }
 
 int main(int argc, char **argv)

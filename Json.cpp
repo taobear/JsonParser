@@ -31,18 +31,30 @@ Json_value::Json_value()
 {
     str.pch = nullptr;
     str.len = 0;
+    type == Json_type::JSON_NULL;
 }
 
 Json_value::~Json_value()
 {
     if (type == Json_type::JSON_STRING) {
-        free(str.pch);
-        str.pch = nullptr;
+        if (str.pch != nullptr) free(str.pch);
     } else if (type == Json_type::JSON_ARRAY) {
         delete []arr.elem;
-        arr.elem = nullptr;
+    } else if (type == Json_type::JSON_OBJECT) {
+        delete []obj.mem;
     }
     type = Json_type::JSON_NULL;
+}
+
+Json_member::Json_member()
+{
+    key = nullptr;
+    klen = 0;
+}
+
+Json_member::~Json_member()
+{
+    if (key != nullptr) free(key);
 }
 
 struct Json_Context {
@@ -174,81 +186,16 @@ static void encode_utf8(std::string &s, unsigned u)
     }
 }
 
-static void set_value_string(Json_value *pval, const std::string& s)
+static void set_value_raw_string(char *&raw_str, size_t &len,
+                                 const std::string& s)
 {
-    size_t len = s.size();
-    pval->str.len = len;
-    pval->str.pch = (char*)malloc(len + 1);
-    memcpy(pval->str.pch, s.c_str(), len);
-    pval->str.pch[len] = '\0';
-    pval->type = JSON_STRING;
+    len = s.size();
+    raw_str = (char*)malloc(len + 1);
+    memcpy(raw_str, s.c_str(), len);
 }
 
-static void transfer_value_array(Json_value *pval,
-                                 std::vector<Json_value *>& pv_vec)
-{
-    size_t size = pv_vec.size();
-    pval->arr.size = size;
-    pval->arr.elem = new Json_value[size];
-    for (size_t i = 0; i < size; ++i) {
-        memcpy(pval->arr.elem + i, pv_vec[i], sizeof(Json_value)); // shallow copy
-        free(pv_vec[i]); // not delete
-        pv_vec[i] = nullptr;
-    }
-    pval->type = Json_type::JSON_ARRAY;
-}
-
-static Json_state parse_value(Json_value *pval, const Json_Context *pjc);
-
-static Json_state parse_array(Json_value *pval, const Json_Context *pjc)
-{
-    ASSERT_STEP(pjc->json_str, '[');
-
-    skip_whitespace(pjc);
-
-    if (*pjc->json_str == ']') {
-        pjc->json_str++;
-        pval->type = JSON_ARRAY;
-        pval->arr.size = 0;
-        pval->arr.elem = NULL;
-        return Json_state::OK;
-    } 
-
-    Json_state ret_state;
-    std::vector<Json_value*> pv_vec;
-
-    auto del_pv = [](const std::vector<Json_value*>& pvec) {
-        for (auto & e : pvec)
-            delete e;
-    };
-
-    while (true) { 
-        Json_value *pv_tmp = (Json_value*)malloc(sizeof(Json_value)); 
-        pv_vec.push_back(pv_tmp);
-
-        skip_whitespace(pjc); 
-        ret_state = parse_value(pv_tmp, pjc);
-        if (ret_state != Json_state::OK) {
-            del_pv(pv_vec);
-            return ret_state;
-        } 
-
-        skip_whitespace(pjc);
-        if (*pjc->json_str == ',') {
-            pjc->json_str++;
-        } else if (*pjc->json_str == ']') {
-            pjc->json_str++;
-            transfer_value_array(pval, pv_vec);
-            return Json_state::OK;
-        } else {
-            del_pv(pv_vec);
-            return Json_state::MISS_COMMA_OR_SQUARE_BRACKET;
-        }
-    }
-
-}
-
-static Json_state parse_string(Json_value *pval, const Json_Context *pjc)
+static Json_state parse_raw_string(char *&raw_str, size_t &len,
+                                   const Json_Context *pjc)
 {
     ASSERT_STEP(pjc->json_str, '\"');
 
@@ -262,7 +209,7 @@ static Json_state parse_string(Json_value *pval, const Json_Context *pjc)
         char ch = *p++;
         switch (ch) {
             case '\"' : // end of qoutation
-                set_value_string(pval, s);
+                set_value_raw_string(raw_str, len, s);
                 return Json_state::OK;
             case '\\' : // escape char
                 switch (*p++) {
@@ -305,14 +252,183 @@ static Json_state parse_string(Json_value *pval, const Json_Context *pjc)
     }
 }
 
-static Json_state parse_value(Json_value *pval, const Json_Context* pjc)
+static Json_state parse_string(Json_value *pval, const Json_Context *pjc)
+{
+    char *p = nullptr; size_t len;
+    Json_state ret_state;
+
+    ret_state = parse_raw_string(p, len, pjc);
+    if (ret_state == Json_state::OK) {
+        pval->str.pch = p;
+        pval->str.len = len;
+        pval->type = Json_type::JSON_STRING;
+    } else if (p != nullptr) {
+        free(p);
+        p = nullptr;
+    }
+    return ret_state;
+}
+
+static void transfer_value_array(Json_value *pval,
+                                 std::vector<Json_value *>& pv_vec)
+{
+    size_t size = pv_vec.size();
+    pval->arr.size = size;
+    pval->arr.elem = new Json_value[size];
+    for (size_t i = 0; i < size; ++i) {
+        memcpy(pval->arr.elem + i, pv_vec[i], sizeof(Json_value)); // shallow copy
+        free(pv_vec[i]); // not delete
+    }
+    pval->type = Json_type::JSON_ARRAY;
+}
+
+// forward declaration
+static Json_state parse_value(Json_value *pval, const Json_Context *pjc);
+
+static Json_state parse_array(Json_value *pval, const Json_Context *pjc)
+{
+    ASSERT_STEP(pjc->json_str, '[');
+
+    skip_whitespace(pjc);
+
+    if (*pjc->json_str == ']') {
+        pjc->json_str++;
+        pval->type = JSON_ARRAY;
+        pval->arr.size = 0;
+        pval->arr.elem = NULL;
+        return Json_state::OK;
+    } 
+
+    Json_state ret_state;
+    std::vector<Json_value*> pv_vec;
+
+    auto del_pv = [](const std::vector<Json_value*>& pvec) {
+        for (auto & e : pvec)
+            delete e;
+    };
+
+    while (true) { 
+        // Json_value *pv_tmp = (Json_value*)malloc(sizeof(Json_value)); 
+        Json_value *pv_tmp = new Json_value;
+        pv_vec.push_back(pv_tmp);
+
+        // parse value
+        ret_state = parse_value(pv_tmp, pjc);
+        if (ret_state != Json_state::OK) {
+            del_pv(pv_vec);
+            return ret_state;
+        } 
+
+        // parse end of array
+        skip_whitespace(pjc);
+        if (*pjc->json_str == ',') {
+            pjc->json_str++;
+            skip_whitespace(pjc);
+        } else if (*pjc->json_str == ']') {
+            pjc->json_str++;
+            transfer_value_array(pval, pv_vec);
+            return Json_state::OK;
+        } else {
+            del_pv(pv_vec);
+            return Json_state::MISS_COMMA_OR_SQUARE_BRACKET;
+        }
+    }
+
+}
+
+static Json_state transfer_value_object(Json_value *pval,
+                                        std::vector<Json_member *> pjm)
+{
+    size_t size = pjm.size();
+    pval->obj.size = size;
+    pval->obj.mem = new Json_member[size];
+    for (size_t i = 0; i < size; ++i) {
+        memcpy(pval->obj.mem + i, pjm[i], sizeof(Json_member)); // shallow copy
+        free(pjm[i]); // not delete
+        pjm[i] = nullptr;
+    }
+    pval->type = Json_type::JSON_OBJECT;
+}
+
+static Json_state parse_object(Json_value *pval, const Json_Context *pjc)
+{
+    ASSERT_STEP(pjc->json_str, '{');
+
+    skip_whitespace(pjc);
+
+    if (*pjc->json_str == '}') {
+        pjc->json_str++;
+        pval->type = JSON_OBJECT;
+        pval->obj.mem = nullptr;
+        pval->obj.size = 0;
+        return Json_state::OK;
+    }
+
+    Json_state ret_state;
+    std::vector<Json_member*> pm_vec;
+
+    auto del_pv = [](const std::vector<Json_member*>& pvec) {
+        for (auto & e : pvec)
+            delete e;
+    };
+
+    while (true) {
+        // Json_member *pjm = (Json_member*)(malloc(sizeof(Json_member)));
+        Json_member *pm_tmp = new Json_member; // need initialize
+        pm_vec.push_back(pm_tmp);
+
+        // parse key
+        if (*pjc->json_str != '"') {
+            del_pv(pm_vec);
+            return Json_state::MISS_KEY;
+        }
+        ret_state = parse_raw_string(pm_tmp->key, pm_tmp->klen, pjc);
+        if (ret_state != Json_state::OK) {
+            del_pv(pm_vec);
+            return ret_state;
+        }
+
+        // parse comma
+        skip_whitespace(pjc);
+        if (*pjc->json_str != ':') {
+            del_pv(pm_vec);
+            return Json_state::MISS_COLON;
+        }
+        pjc->json_str++;
+
+        // parse value
+        skip_whitespace(pjc);
+        ret_state = parse_value(&pm_tmp->val, pjc);
+        if (ret_state != Json_state::OK) {
+            del_pv(pm_vec);
+            return ret_state;
+        }
+
+        // parse end of member
+        skip_whitespace(pjc);
+        if (*pjc->json_str == ',') {
+            pjc->json_str++;
+            skip_whitespace(pjc);
+        } else if (*pjc->json_str == '}') {
+            pjc->json_str++;
+            transfer_value_object(pval, pm_vec);
+            return Json_state::OK;
+        } else {
+            del_pv(pm_vec);
+            return Json_state::MISS_COMMA_OR_CURLY_BRACKET;
+        }
+    }
+}
+
+static Json_state parse_value(Json_value *pval, const Json_Context *pjc)
 {
     switch (*pjc->json_str) {
         case 'n' :  return parse_null(pval, pjc);
         case 'f' :  return parse_false(pval, pjc);
         case 't' :  return parse_true(pval, pjc);
         case '\"' : return parse_string(pval, pjc);
-        case '['  : return parse_array(pval, pjc);
+        case '[' :  return parse_array(pval, pjc);
+        case '{' :  return parse_object(pval, pjc);
         case '\0' : return Json_state::EXPECT_VALUE;
         // default :   return Json_state::INVALID_VALUE;
         default :   return parse_number(pval, pjc);
@@ -339,4 +455,4 @@ Json_state Json::parse(Json_value *pval, const std::string& json_str)
     return state;
 }
 
-} // end of namespace JsonParser
+} // end namespace JsonParser
