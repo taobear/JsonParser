@@ -1,2 +1,2 @@
 # JsonParser
-A json parser to learn the workflow of C++ programming
+A json parser to learn the workflow of TDD
